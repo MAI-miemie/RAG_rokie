@@ -175,6 +175,6 @@ retrieve_and_generate(
 
 ## 贡献者
 
-- **开发者**：chengyibing@pami-ai.com
+- **开发者**：chenyibing@pami-ai.com
 
 ---
