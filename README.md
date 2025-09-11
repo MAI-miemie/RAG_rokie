@@ -207,7 +207,7 @@ pip install -r requirements.txt
 
 ## 贡献者
 
-- **开发者**：chenyibing@pami-ai.com
+- **开发者**：MieMie
 - **维护者**：MieMie
 
 ## 致谢
