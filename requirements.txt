@@ -1,3 +1,5 @@
-zhipuai
+requests
 python-dotenv
 numpy
+transformers
+torch

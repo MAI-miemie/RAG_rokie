@@ -1,10 +1,11 @@
 import sqlite3  # 用于操作SQLite数据库
 import pickle  # 用于反序列化数据
 from typing import List, Tuple
-from zhipuai import ZhipuAI  # 用于调用智谱AI生成Embedding
 from dotenv import load_dotenv  # 用于加载 .env 文件中的环境变量
 import os  # 用于读取环境变量
 import numpy as np  # 用于计算余弦相似度，numpy是一个非常经典的计算库
+from transformers import AutoTokenizer, AutoModel
+import torch
 # ps： 你可以手动实现向量的计算（不推荐），numpy只是做了封装
 
 # ======================
@@ -14,39 +15,52 @@ import numpy as np  # 用于计算余弦相似度，numpy是一个非常经典�
 # 这个文件中我们没有指定路径，他会自动从路径 .env 导入
 load_dotenv()  # 从 .env 文件加载环境变量
 
-# 获取 API 密钥和数据库路径
-ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY")  # 从 .env 文件获取智谱AI API 密钥
+# 获取数据库路径
 DATABASE_PATH = os.getenv("DATABASE_PATH")  # 从 .env 文件获取数据库路径
 
-# ======================
-# 初始化智谱AI接口
-# ======================
-def initialize_zhipu(api_key: str):
-    """
-    设置智谱AI的API密钥。
-    :param api_key: 智谱AI的API密钥。
-    """
-    #同存储
+# 初始化模型和分词器
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+tokenizer = None
+model = None
 
 # ======================
-# 调用智谱AI生成Embedding
+# 初始化本地模型
+# ======================
+def initialize_model():
+    """
+    初始化本地嵌入模型
+    """
+    global tokenizer, model
+    try:
+        print("正在加载嵌入模型...")
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        model = AutoModel.from_pretrained(MODEL_NAME)
+        print("模型加载完成！")
+    except Exception as e:
+        print(f"模型加载失败: {e}")
+        raise e
+
+# ======================
+# 使用本地模型生成Embedding
 # ======================
 def generate_embedding(text: str) -> List[float]:
     """
-    使用智谱AI生成文本的向量（Embedding）。
+    使用本地模型生成文本的向量（Embedding）。
     :param text: 输入的文本字符串。
     :return: 文本的Embedding（浮点数列表）。
     """
     try:
-       # 初始化智谱AI客户端,注意初始化客户端需要传入apikey
-        client = ZhipuAI(api_key=ZHIPU_API_KEY)
-        # 调用智谱AI的Embedding接口，将文本传入
-        response = client.embeddings.create(
-            model="embedding-3", #填写需要调用的模型编码
-            input= text, # 传入需要生成embedding的文本                            
-                )
-        # 返回生成的Embedding向量,因为我们只传入了一个，所以只返回第0条数据
-        return response.data[0].embedding
+        # 对文本进行分词
+        inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
+        
+        # 生成嵌入向量
+        with torch.no_grad():
+            outputs = model(**inputs)
+            # 使用[CLS]标记的嵌入作为句子嵌入
+            embeddings = outputs.last_hidden_state[:, 0, :].numpy()
+        
+        # 返回嵌入向量的列表形式
+        return embeddings[0].tolist()
     except Exception as e:
         print(f"生成Embedding时出错: {e}")
         return []
@@ -99,12 +113,12 @@ def query_similar_text(query: str, db_path: str, api_key: str, top_k: int = 3) -
     根据查询文本，从数据库中检索最相似的文本块。
     :param query: 用户的查询文本。
     :param db_path: 数据库文件路径。
-    :param api_key: 智谱AI的API密钥。
+    :param api_key: Hugging Face的API密钥。
     :param top_k: 返回最相似的前K个文本块。
     :return: 返回一个包含(file_name, chunk, similarity)的列表，按相似度降序排列。
     """
-    # 1. 设置智谱AI API密钥
-    initialize_zhipu(api_key)
+    # 1. 初始化本地模型
+    initialize_model()
 
     # 2. 对查询文本生成Embedding
     query_embedding = generate_embedding(query)
@@ -131,7 +145,7 @@ def query_similar_text(query: str, db_path: str, api_key: str, top_k: int = 3) -
 if __name__ == "__main__":
     # 示例查询
     user_query = "谁给谁买了橘子"  # 替换为你的查询
-    top_k_results = query_similar_text(user_query, DATABASE_PATH, ZHIPU_API_KEY, top_k=3)
+    top_k_results = query_similar_text(user_query, DATABASE_PATH, "", top_k=3)
 
     # 打印结果
     print("查询结果：")

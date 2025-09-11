@@ -1,9 +1,11 @@
 import os
 import sqlite3  # Python内置的SQLite数据库模块，用于创建和操作轻量级数据库
 from typing import List  # 用于定义函数返回值的类型
-from zhipuai import ZhipuAI  # 智谱AI官方提供的Python包，用于调用其API生成Embedding
 import pickle  # 用于将复杂对象（如列表）序列化为二进制格式
 from dotenv import load_dotenv
+from transformers import AutoTokenizer, AutoModel
+import torch
+import numpy as np
 # ======================
 # 加载环境变量
 # ======================
@@ -11,39 +13,52 @@ from dotenv import load_dotenv
 #注意这里的 .env 文件是指的存有环境变量数据的文件路径，可以是相对路径，也可以是绝对路径，他可以不叫.env 只要内容格式正确即可
 load_dotenv(".env")  # 从 .env 文件中加载环境变量
 
-# 获取 API 密钥和数据库路径
-ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY")  # 从 .env 文件获取智谱AI API 密钥
+# 获取数据库路径
 DATABASE_PATH = os.getenv("DATABASE_PATH")  # 从 .env 文件获取数据库路径
 
-# ======================
-# 初始化智谱AI接口
-# ======================
-def initialize_zhipu(api_key: str):
-    """
-    设置智谱AI的API密钥，以便后续使用智谱AI的API生成Embedding。
-    :param api_key: 智谱AI的API密钥（字符串形式）。
-    """
-    # 这里不需要做事，创建client传入apikey即可
+# 初始化模型和分词器
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+tokenizer = None
+model = None
 
 # ======================
-# 调用智谱AI生成Embedding
+# 初始化本地模型
+# ======================
+def initialize_model():
+    """
+    初始化本地嵌入模型
+    """
+    global tokenizer, model
+    try:
+        print("正在加载嵌入模型...")
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        model = AutoModel.from_pretrained(MODEL_NAME)
+        print("模型加载完成！")
+    except Exception as e:
+        print(f"模型加载失败: {e}")
+        raise e
+
+# ======================
+# 使用本地模型生成Embedding
 # ======================
 def generate_embedding(text: str) -> List[float]:
    """
-   使用智谱AI生成指定文本的向量（Embedding）。
+   使用本地模型生成指定文本的向量（Embedding）。
    :param text: 输入的文本字符串。
    :return: 返回一个浮点数列表，表示文本的Embedding向量。
    """
    try:
-       # 初始化智谱AI客户端,注意初始化客户端需要传入apikey
-        client = ZhipuAI(api_key=ZHIPU_API_KEY)
-        # 调用智谱AI的Embedding接口，将文本传入
-        response = client.embeddings.create(
-            model="embedding-3", #填写需要调用的模型编码
-            input= text, # 传入需要生成embedding的文本                            
-                )
-        # 返回生成的Embedding向量,因为我们只传入了一个，所以只返回第0条数据
-        return response.data[0].embedding
+       # 对文本进行分词
+       inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
+       
+       # 生成嵌入向量
+       with torch.no_grad():
+           outputs = model(**inputs)
+           # 使用[CLS]标记的嵌入作为句子嵌入
+           embeddings = outputs.last_hidden_state[:, 0, :].numpy()
+       
+       # 返回嵌入向量的列表形式
+       return embeddings[0].tolist()
    except Exception as e:
        # 如果生成失败，打印错误信息
        print(f"生成Embedding时出错: {e}")
@@ -131,11 +146,11 @@ def store_embeddings(file_path: str, api_key: str, db_path: str = "vector_databa
     """
     主流程：从文档读取文本，生成Embedding，并存储到数据库中。
     :param file_path: 文档路径。
-    :param api_key: 智谱AI的API密钥。
+    :param api_key: Hugging Face的API密钥。
     :param db_path: 数据库文件路径。
     """
-    # 1. 设置智谱AI API密钥
-    initialize_zhipu(api_key)
+    # 1. 初始化本地模型
+    initialize_model()
 
     # 2. 初始化数据库
     initialize_database(db_path)
@@ -176,9 +191,8 @@ def store_embeddings(file_path: str, api_key: str, db_path: str = "vector_databa
 # 组织代码
 # 将测试代码、脚本执行入口或其他需要运行的逻辑放在 if __name__ == "__main__": 块中，保持模块作为库导入时的整洁。
 if __name__ == "__main__":
-    # 替换为你的文档路径和智谱AI的API密钥
+    # 替换为你的文档路径
     document_path = "beiying.txt"  # 替换为要处理的文档路径
-    zhipu_api_key = ZHIPU_API_KEY  # 替换为智谱AI的真实API密钥
     database_path = DATABASE_PATH  # 数据库存储路径
     # 调用主函数开始处理
-    store_embeddings(document_path, zhipu_api_key, database_path)
+    store_embeddings(document_path, "", database_path)
