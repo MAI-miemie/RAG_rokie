@@ -1,0 +1,4 @@
+[33m27f107e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m feat: 完成RAG系统开发，支持本地模型和完整问答功能
+[33m20dfff0[m Update README.md
+[33me1ca719[m Delete vector_database.db
+[33mb69ed85[m init
