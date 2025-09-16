@@ -40,7 +40,7 @@ llm-RAGStarter/
 
 ### 1. 克隆项目
 ```bash
-git clone https://github.com/MAI-miemie/RAG_rokie.git
+git clone https://github.com/MAI-miemie/RAG_rokie.git llm-RAGStarter
 cd llm-RAGStarter
 ```
 
